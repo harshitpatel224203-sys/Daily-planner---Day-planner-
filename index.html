@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Audio Adhyay Admin</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#000;color:#fff;font:16px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+#root{max-width:640px;margin:auto;padding:16px}
+h2{margin:8px 0 12px;font-size:20px}
+header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+header button{width:auto;margin:0;padding:8px 14px}
+input,select,textarea,button{width:100%;font:inherit;padding:12px;margin:6px 0;border-radius:10px;border:1px solid #333;background:#111;color:#fff}
+textarea{min-height:110px}
+button{background:#fff;color:#000;font-weight:700;border:0;cursor:pointer}
+button.ghost{background:#000;color:#fff;border:1px solid #444}
+button.red{background:#000;color:#ff7b7b;border:1px solid #6a2a2a}
+input[type=checkbox]{width:20px;height:20px;margin:2px 10px 0 0;flex:none}
+label{display:block;color:#9a9a9a;font-size:14px;margin-top:10px}
+.check{display:flex;color:#fff;font-size:15px;margin-top:14px}
+.row{display:flex;gap:12px;align-items:center;padding:12px 0;border-bottom:1px solid #1f1f1f;cursor:pointer}
+.row .info{flex:1;min-width:0}
+.row small{color:#9a9a9a}
+.thumb{width:48px;height:68px;border-radius:6px;background:#222 center/cover;flex:none}
+.tag{font-size:12px;padding:3px 10px;border-radius:99px;border:1px solid #444;color:#9a9a9a}
+.tag.published{background:#fff;color:#000;border-color:#fff}
+.ch{display:flex;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid #1f1f1f}
+.ch .info{flex:1;min-width:0}
+.ch button{width:auto;margin:0;padding:6px 12px}
+#msg{min-height:22px;margin:8px 0;font-size:14px}
+.err{color:#ff7b7b}.ok{color:#7bff9a}
+.box{border:1px solid #222;border-radius:12px;padding:12px;margin-top:16px}
+
+.tabs{display:flex;gap:8px;margin-bottom:12px}
+.tabs button{margin:0;padding:10px}
+.tag.on{background:#fff;color:#000;border-color:#fff}
+.opt{position:relative;border:1px solid #262626;border-radius:10px;margin:8px 0;padding:10px 12px;display:flex;justify-content:space-between;overflow:hidden}
+.opt .fill{position:absolute;left:0;top:0;bottom:0;background:#ffffff26}
+.opt span,.opt b{position:relative}
+.prow{display:flex;gap:8px}
+.prow button{margin:8px 0 0}
+small{color:#9a9a9a}
+.item{border-bottom:1px solid #1f1f1f;padding:12px 0}
+.item .top{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
+button.sm{width:auto;margin:0;padding:6px 12px}
+.tag{white-space:nowrap}
+.tabs button{padding:10px 4px;font-size:14px;min-width:0}
+.row2{display:flex;gap:10px}
+.row2>div{flex:1;min-width:0}
+.upd small{display:block;margin-top:4px}
+</style>
+</head>
+<body>
+<div id="root"><p style="color:#9a9a9a">Loading… agar ye line hamesha dikhe, to JavaScript ya internet block hai.</p></div>
+<script>window.onerror=function(m,s,l){var r=document.getElementById("root");if(r)r.innerHTML='<p style="color:#ff7b7b">Error: '+m+' (line '+l+')</p>';};</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script>
+// ====== SIRF YE DO LINES BADLO (public key hi daalna, service_role/secret NAHI) ======
+const SUPABASE_URL = "https://cdcsjurvtukyidjpzvga.supabase.co";
+const SUPABASE_KEY = "sb_publishable_k1zEdgsnl4b0nQS0L3lpWQ_ZkrdDwgP";
+// ======================================================================================
+
+if (typeof supabase === 'undefined') throw new Error('Supabase library load nahi hui. Internet check karo, ya file ko online host karke kholo.');
+const sb = SUPABASE_URL.startsWith('PASTE') ? null : supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const root = document.getElementById('root');
+const $ = s => document.querySelector(s);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const ext = f => (f.name.split('.').pop() || 'bin').toLowerCase().replace(/[^a-z0-9]/g, '');
+let cats = [], chList = [];
+
+function msg(t, bad) {
+  const m = $('#msg');
+  if (m) { m.textContent = t; m.className = bad ? 'err' : 'ok'; }
+}
+function coverUrl(p) {
+  return p ? sb.storage.from('covers').getPublicUrl(p).data.publicUrl : '';
+}
+function fmt(s) {
+  if (!s) return '';
+  const m = Math.floor(s / 60), r = s % 60;
+  return m + ':' + String(r).padStart(2, '0');
+}
+
+async function init() {
+  if (SUPABASE_URL.startsWith('PASTE')) {
+    root.innerHTML = '<h2>Setup baaki hai</h2><p>index.html ke upar wali 2 lines me apna Project URL aur public key daalo.</p>';
+    return;
+  }
+  const { data } = await sb.auth.getSession();
+  data.session ? guard() : loginView();
+}
+
+function loginView() {
+  root.innerHTML = `<h2>Audio Adhyay Admin</h2>
+  <label>Email</label><input id="em" type="email" autocomplete="username">
+  <label>Password</label><input id="pw" type="password" autocomplete="current-password">
+  <button id="go">Log in</button><div id="msg"></div>`;
+  $('#go').onclick = async () => {
+    msg('Logging in…');
+    const { error } = await sb.auth.signInWithPassword({ email: $('#em').value.trim(), password: $('#pw').value });
+    if (error) return msg(error.message, 1);
+    guard();
+  };
+}
+
+async function guard() {
+  const { data, error } = await sb.rpc('is_admin');
+  if (error || data !== true) {
+    await sb.auth.signOut();
+    loginView();
+    return msg('This account is not an admin.', 1);
+  }
+  location.hash === '#polls' ? pollsView() : location.hash === '#notify' ? notifView() : location.hash === '#updates' ? updView() : listView();
+}
+
+
+function tabs(active) {
+  return `<div class="tabs">
+    <button class="${active === 'books' ? '' : 'ghost'}" onclick="listView()">Books</button>
+    <button class="${active === 'polls' ? '' : 'ghost'}" onclick="pollsView()">Polls</button>
+    <button class="${active === 'notify' ? '' : 'ghost'}" onclick="notifView()">Notifications</button>
+    <button class="${active === 'updates' ? '' : 'ghost'}" onclick="updView()">Updates</button>
+  </div>`;
+}
+
+async function logout() { await sb.auth.signOut(); loginView(); }
+
+async function listView() {
+  const [c, b] = await Promise.all([
+    sb.from('categories').select('*').order('name'),
+    sb.from('books').select('*').order('created_at', { ascending: false })
+  ]);
+  cats = c.data || [];
+  const rows = (b.data || []).map(x => `
+    <div class="row" onclick="editView('${x.id}')">
+      <div class="thumb" style="background-image:url('${esc(coverUrl(x.cover_path))}')"></div>
+      <div class="info"><b>${esc(x.title)}</b><br><small>${esc(x.author)}</small></div>
+      <span class="tag ${x.status}">${x.status}</span>
+    </div>`).join('');
+  history.replaceState(null, '', '#books');
+  root.innerHTML = `<header><h2>Books</h2><button class="ghost" onclick="logout()">Log out</button></header>
+    ${tabs('books')}
+    <button onclick="editView()">Add book</button>
+    <button class="ghost" onclick="addCat()">Add category</button>
+    <div id="msg"></div>
+    ${rows || '<p style="color:#9a9a9a">No books yet. Tap “Add book” to start.</p>'}`;
+}
+
+async function addCat() {
+  const name = (prompt('Category name') || '').trim();
+  if (!name) return;
+  const { error } = await sb.from('categories').insert({ name });
+  await listView();
+  msg(error ? error.message : 'Category added', !!error);
+}
+
+async function editView(id) {
+  let b = { title: '', author: '', description: '', category_id: '', rights_basis: '', rights_confirmed: false, status: 'draft', cover_path: null };
+  chList = [];
+  if (id) {
+    b = (await sb.from('books').select('*').eq('id', id).single()).data;
+    chList = (await sb.from('chapters').select('*').eq('book_id', id).order('position')).data || [];
+  }
+  const catOpts = '<option value="">No category</option>' + cats.map(c => `<option value="${c.id}" ${c.id === b.category_id ? 'selected' : ''}>${esc(c.name)}</option>`).join('');
+  const rb = [['', 'Select…'], ['public_domain', 'Public domain'], ['own_recording', 'My own recording'], ['licensed', 'Licensed to me']]
+    .map(o => `<option value="${o[0]}" ${o[0] === (b.rights_basis || '') ? 'selected' : ''}>${o[1]}</option>`).join('');
+  const chHtml = chList.map((c, i) => `<div class="ch"><div class="info"><b>${c.position}. ${esc(c.title)}</b><br><small>${fmt(c.duration_sec)}</small></div><button class="red" onclick="delCh(${i},'${id}')">Delete</button></div>`).join('');
+
+  root.innerHTML = `<header><h2>${id ? 'Edit book' : 'New book'}</h2><button class="ghost" onclick="listView()">Back</button></header>
+  <span class="tag ${b.status}">${b.status}</span>
+  <label>Title</label><input id="t" value="${esc(b.title)}">
+  <label>Author</label><input id="a" value="${esc(b.author)}">
+  <label>Description</label><textarea id="d">${esc(b.description)}</textarea>
+  <label>Category</label><select id="c">${catOpts}</select>
+  <label>Cover image (JPG or PNG)</label>
+  ${b.cover_path ? `<div class="thumb" style="width:90px;height:130px;background-image:url('${esc(coverUrl(b.cover_path))}')"></div>` : ''}
+  <input id="cv" type="file" accept="image/*">
+  <div class="box"><b>Rights</b>
+    <label>I distribute this audiobook as</label><select id="rb">${rb}</select>
+    <label class="check"><input id="rc" type="checkbox" ${b.rights_confirmed ? 'checked' : ''}>I confirm I hold the rights to distribute this audiobook.</label>
+  </div>
+  <div id="msg"></div>
+  <button onclick="save('${id || ''}','${b.status}')">${id ? 'Save changes' : 'Save as draft'}</button>
+  ${id ? (b.status === 'published'
+      ? `<button class="ghost" onclick="save('${id}','draft')">Unpublish</button>`
+      : `<button class="ghost" onclick="save('${id}','published')">Publish</button>`) : ''}
+  ${id ? `<div class="box"><b>Chapters</b>${chHtml || '<p style="color:#9a9a9a">No chapters yet.</p>'}
+    <label>Chapter title</label><input id="ct">
+    <label>Audio file (MP3 or M4A)</label><input id="au" type="file" accept="audio/*">
+    <button class="ghost" onclick="addCh('${id}')">Upload chapter</button></div>
+  <button class="red" style="margin-top:24px" onclick="delBook('${id}')">Delete book</button>` : '<p style="color:#9a9a9a">Save the draft first, then add chapters.</p>'}`;
+}
+
+async function save(id, status) {
+  const f = {
+    title: $('#t').value.trim(), author: $('#a').value.trim(), description: $('#d').value,
+    category_id: $('#c').value || null, rights_basis: $('#rb').value || null,
+    rights_confirmed: $('#rc').checked, updated_at: new Date().toISOString()
+  };
+  if (!f.title || !f.author) return msg('Title and author are required.', 1);
+  if (status === 'published') {
+    if (!f.rights_basis || !f.rights_confirmed) return msg('Select the rights basis and confirm you hold the rights before publishing.', 1);
+    const n = await sb.from('chapters').select('id', { count: 'exact', head: true }).eq('book_id', id);
+    if (!n.count) return msg('Add at least one chapter before publishing.', 1);
+  }
+  msg('Saving…');
+  let bid = id;
+  if (id) {
+    const { error } = await sb.from('books').update({ ...f, status }).eq('id', id);
+    if (error) return msg(error.message, 1);
+  } else {
+    const { data, error } = await sb.from('books').insert({ ...f, status: 'draft' }).select().single();
+    if (error) return msg(error.message, 1);
+    bid = data.id;
+  }
+  const file = $('#cv').files[0];
+  if (file) {
+    const path = `${bid}/cover-${Date.now()}.${ext(file)}`;
+    const up = await sb.storage.from('covers').upload(path, file, { contentType: file.type });
+    if (up.error) return msg('Cover upload failed: ' + up.error.message, 1);
+    const old = id ? (await sb.from('books').select('cover_path').eq('id', bid).single()).data : null;
+    await sb.from('books').update({ cover_path: path }).eq('id', bid);
+    if (old && old.cover_path) await sb.storage.from('covers').remove([old.cover_path]);
+  }
+  await editView(bid);
+  msg(status === 'published' ? 'Published' : (id ? 'Saved' : 'Draft saved'));
+}
+
+function duration(f) {
+  return new Promise(r => {
+    const a = new Audio(); a.preload = 'metadata';
+    const u = URL.createObjectURL(f);
+    a.onloadedmetadata = () => { r(Math.round(a.duration) || null); URL.revokeObjectURL(u); };
+    a.onerror = () => r(null);
+    a.src = u;
+  });
+}
+
+async function addCh(bid) {
+  const f = $('#au').files[0], t = $('#ct').value.trim();
+  if (!t || !f) return msg('Enter a chapter title and choose an audio file.', 1);
+  const last = (await sb.from('chapters').select('position').eq('book_id', bid).order('position', { ascending: false }).limit(1)).data;
+  const pos = (last && last[0] ? last[0].position : 0) + 1;
+  const path = `${bid}/${pos}-${Date.now()}.${ext(f)}`;
+  msg('Uploading… keep this page open.');
+  const up = await sb.storage.from('audio').upload(path, f, { contentType: f.type || 'audio/mpeg' });
+  if (up.error) return msg('Upload failed: ' + up.error.message, 1);
+  const dur = await duration(f);
+  const { error } = await sb.from('chapters').insert({ book_id: bid, title: t, position: pos, audio_path: path, duration_sec: dur });
+  if (error) { await sb.storage.from('audio').remove([path]); return msg(error.message, 1); }
+  await editView(bid);
+  msg('Chapter added');
+}
+
+async function delCh(i, bid) {
+  const c = chList[i];
+  if (!confirm('Delete chapter “' + c.title + '”?')) return;
+  await sb.storage.from('audio').remove([c.audio_path]);
+  const { error } = await sb.from('chapters').delete().eq('id', c.id);
+  await editView(bid);
+  msg(error ? error.message : 'Chapter deleted', !!error);
+}
+
+async function delBook(id) {
+  if (!confirm('Delete this book, its cover and all chapters? This cannot be undone.')) return;
+  const b = (await sb.from('books').select('cover_path').eq('id', id).single()).data;
+  const ch = (await sb.from('chapters').select('audio_path').eq('book_id', id)).data || [];
+  if (ch.length) await sb.storage.from('audio').remove(ch.map(c => c.audio_path));
+  if (b && b.cover_path) await sb.storage.from('covers').remove([b.cover_path]);
+  const { error } = await sb.from('books').delete().eq('id', id);
+  await listView();
+  msg(error ? error.message : 'Book deleted', !!error);
+}
+
+// ================== POLLS ==================
+async function pollsView(flash, bad) {
+  history.replaceState(null, '', '#polls');
+  const r = await sb.from('polls').select('id,question,is_active').order('created_at', { ascending: false });
+  if (r.error) { root.innerHTML = '<p class="err">' + esc(r.error.message) + '</p>'; return; }
+  const polls = r.data || [];
+  const res = await Promise.all(polls.map(p => sb.rpc('poll_json', { p_poll: p.id })));
+
+  const cards = polls.map((p, i) => {
+    const j = res[i].data || { options: [] };
+    const total = j.options.reduce((a, o) => a + o.votes, 0);
+    const opts = j.options.map(o => {
+      const pct = total ? Math.round(o.votes * 100 / total) : 0;
+      return `<div class="opt"><div class="fill" style="width:${pct}%"></div><span>${esc(o.text)}</span><b>${o.votes} (${pct}%)</b></div>`;
+    }).join('');
+    return `<div class="box">
+      <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start">
+        <b>${esc(p.question)}</b><span class="tag ${p.is_active ? 'on' : ''}">${p.is_active ? 'active' : 'closed'}</span>
+      </div>
+      ${opts}<small>${total} votes</small>
+      <div class="prow">
+        ${p.is_active
+          ? `<button class="ghost" onclick="pollClose('${p.id}')">Close poll</button>`
+          : `<button onclick="pollActivate('${p.id}')">Make active</button>`}
+        <button class="red" onclick="pollDel('${p.id}')">Delete</button>
+      </div></div>`;
+  }).join('');
+
+  root.innerHTML = `<header><h2>Polls</h2><button class="ghost" onclick="logout()">Log out</button></header>
+    ${tabs('polls')}
+    <div class="box" style="margin-top:0">
+      <b>New poll</b>
+      <label>Question</label><input id="q" value="Which audiobook should we add next?">
+      <label>Options (ek line me ek book, 2 se 8)</label><textarea id="o"></textarea>
+      <small>Sirf wahi books suggest karo jinke distribution rights aap la sako.</small>
+      <button onclick="pollCreate()">Create poll</button>
+    </div>
+    <div id="msg"></div>${cards || '<p style="color:#9a9a9a">Abhi koi poll nahi hai.</p>'}`;
+  if (flash) msg(flash, bad);
+}
+
+async function pollCreate() {
+  const q = $('#q').value.trim();
+  const opts = $('#o').value.split('\n').map(s => s.trim()).filter(Boolean);
+  if (!q) return msg('Question likho.', 1);
+  if (opts.length < 2 || opts.length > 8) return msg('2 se 8 options chahiye.', 1);
+  const p = await sb.from('polls').insert({ question: q, is_active: false }).select().single();
+  if (p.error) return msg(p.error.message, 1);
+  const o = await sb.from('poll_options').insert(opts.map((t, i) => ({ poll_id: p.data.id, text: t, position: i })));
+  if (o.error) {
+    await sb.from('polls').delete().eq('id', p.data.id);
+    return msg(o.error.message, 1);
+  }
+  pollsView('Poll ban gaya. "Make active" dabao to app me dikhega.');
+}
+
+async function pollActivate(id) {
+  await sb.from('polls').update({ is_active: false }).eq('is_active', true);
+  const r = await sb.from('polls').update({ is_active: true }).eq('id', id);
+  pollsView(r.error ? r.error.message : 'Poll active hai, app me dikhega.', !!r.error);
+}
+
+async function pollClose(id) {
+  const r = await sb.from('polls').update({ is_active: false }).eq('id', id);
+  pollsView(r.error ? r.error.message : 'Poll band ho gaya.', !!r.error);
+}
+
+async function pollDel(id) {
+  if (!confirm('Ye poll aur uske saare votes delete ho jaayenge. Pakka?')) return;
+  const r = await sb.from('polls').delete().eq('id', id);
+  pollsView(r.error ? r.error.message : 'Poll delete ho gaya.', !!r.error);
+}
+
+// ================== NOTIFICATIONS ==================
+const NLABELS = { announcement: 'Announcement', new_chapter: 'New chapter', update: 'App update', new_book: 'New audiobook', poll: 'Poll' };
+let notifBooks = [];
+
+async function notifView(flash, bad) {
+  history.replaceState(null, '', '#notify');
+  const b = await sb.from('books').select('id,title,cover_path').eq('status', 'published').order('title');
+  notifBooks = b.data || [];
+  const n = await sb.from('notifications').select('*').order('created_at', { ascending: false }).limit(20);
+  if (n.error) { root.innerHTML = '<p class="err">' + esc(n.error.message) + '</p>'; return; }
+
+  const bookOpts = '<option value="">No book</option>' + notifBooks.map(x => `<option value="${x.id}">${esc(x.title)}</option>`).join('');
+  const list = (n.data || []).map(x => `
+    <div class="item">
+      <div class="top"><b>${esc(x.title)}</b><span class="tag">${esc(NLABELS[x.type] || x.type)}</span></div>
+      ${x.body ? `<div>${esc(x.body)}</div>` : ''}
+      <div class="top" style="margin-top:6px;align-items:center">
+        <small>${new Date(x.created_at).toLocaleString()}</small>
+        <button class="red sm" onclick="notifDel('${x.id}')">Delete</button>
+      </div>
+    </div>`).join('');
+
+  root.innerHTML = `<header><h2>Notifications</h2><button class="ghost" onclick="logout()">Log out</button></header>
+    ${tabs('notify')}
+    <div class="box" style="margin-top:0">
+      <b>Send a notification</b>
+      <label>Type</label>
+      <select id="ty">
+        <option value="announcement">Announcement</option>
+        <option value="new_chapter">New chapter (choose a book)</option>
+        <option value="update">App update (opens the Play Store)</option>
+        <option value="new_book">New audiobook (re-announce a book)</option>
+      </select>
+      <label>Title (max 100)</label><input id="ti" maxlength="100" placeholder="e.g. Big news from Audio Adhyay">
+      <label>Message (max 300)</label><textarea id="bo" maxlength="300"></textarea>
+      <label>Book (its cover is shown, and tapping opens it)</label><select id="bk">${bookOpts}</select>
+      <label>Image (optional, for announcements)</label><input id="im" type="file" accept="image/*">
+      <small>Phones receive notifications within about 15 minutes, or immediately when the app is opened. Auto-sent: new audiobook (when you publish) and polls (when you make one active).</small>
+      <button onclick="notifSend()">Send notification</button>
+    </div>
+    <div id="msg"></div>
+    <h2 style="margin-top:20px">Recent</h2>
+    ${list || '<p style="color:#9a9a9a">Nothing sent yet.</p>'}`;
+  if (flash) msg(flash, bad);
+}
+
+async function notifSend() {
+  const type = $('#ty').value;
+  const title = $('#ti').value.trim();
+  const body = $('#bo').value.trim();
+  const bid = $('#bk').value;
+  if (!title) return msg('Please enter a title.', 1);
+  if ((type === 'new_chapter' || type === 'new_book') && !bid) return msg('Please choose a book for this type.', 1);
+
+  let image = null;
+  const book = notifBooks.find(x => x.id === bid);
+  if (book && book.cover_path) image = book.cover_path;
+
+  const f = $('#im').files[0];
+  if (f) {
+    const path = 'notif/' + Date.now() + '.' + ext(f);
+    msg('Uploading image…');
+    const up = await sb.storage.from('covers').upload(path, f, { contentType: f.type });
+    if (up.error) return msg('Image upload failed: ' + up.error.message, 1);
+    image = path;
+  }
+
+  msg('Sending…');
+  const r = await sb.from('notifications').insert({ type, title, body, book_id: bid || null, image_path: image });
+  if (r.error) return msg(r.error.message, 1);
+  notifView('Sent. Phones will receive it shortly.');
+}
+
+async function notifDel(id) {
+  if (!confirm('Delete this notification? Phones that already received it keep it.')) return;
+  const r = await sb.from('notifications').delete().eq('id', id);
+  notifView(r.error ? r.error.message : 'Deleted.', !!r.error);
+}
+
+// ================== APP UPDATES ==================
+async function updView(flash, bad) {
+  history.replaceState(null, '', '#updates');
+  const r = await sb.from('app_config').select('*').eq('id', 1).single();
+  if (r.error) { root.innerHTML = '<p class="err">' + esc(r.error.message) + '</p>'; return; }
+  const c = r.data;
+  const page = c.update_url || (location.origin + '/download.html');
+
+  root.innerHTML = `<div class="upd"><header><h2>App updates</h2><button class="ghost" onclick="logout()">Log out</button></header>
+    ${tabs('updates')}
+    <div class="box" style="margin-top:0">
+      <b>Currently released</b>
+      <small>Version ${esc(c.latest_version_name)} (build ${c.latest_version_code}). Users on an older build see a required-update popup until they update.</small>
+    </div>
+
+    <div class="box">
+      <b>Release a new version</b>
+      <div class="row2">
+        <div><label>Build number (versionCode)</label><input id="lc" type="number" min="1" value="${c.latest_version_code}"></div>
+        <div><label>Version name</label><input id="ln" value="${esc(c.latest_version_name)}"></div>
+      </div>
+      <small>These must match the versionCode and versionName inside the new app build. The build number must go up with every release.</small>
+
+      <label>What's new (shown in the app and on the download page)</label>
+      <textarea id="rn" maxlength="500">${esc(c.release_notes)}</textarea>
+
+      <label>Upload the new APK</label>
+      <input id="ap" type="file" accept=".apk,application/vnd.android.package-archive">
+      <button class="ghost" onclick="updUploadApk()">Upload APK</button>
+      <label>APK link (filled automatically after upload)</label>
+      <input id="ak" value="${esc(c.apk_url || '')}" placeholder="https://...">
+
+      <label>Update page (opens when users tap Update in the app)</label>
+      <input id="ur" value="${esc(page)}">
+      <small>This is your website's download page. It shows the latest version and the Download button.</small>
+
+      <label class="check"><input id="nt" type="checkbox" checked>Also send a push notification</label>
+      <button onclick="updSave()">Save and release</button>
+    </div>
+    <div id="msg"></div></div>`;
+  if (flash) msg(flash, bad);
+}
+
+async function updUploadApk() {
+  const f = $('#ap').files[0];
+  if (!f) return msg('Choose an APK file first.', 1);
+  const code = $('#lc').value || '0';
+  const name = ($('#ln').value || 'x').replace(/[^a-zA-Z0-9.\-]/g, '');
+  const path = `audio-adhyay-v${name}-b${code}.apk`;
+  msg('Uploading… keep this page open.');
+  const up = await sb.storage.from('releases').upload(path, f, { contentType: 'application/vnd.android.package-archive', upsert: true });
+  if (up.error) return msg('Upload failed: ' + up.error.message, 1);
+  $('#ak').value = sb.storage.from('releases').getPublicUrl(path).data.publicUrl;
+  msg('APK uploaded and the link is filled in. Now tap "Save and release".');
+}
+
+async function updSave() {
+  const lc = parseInt($('#lc').value, 10);
+  const ln = $('#ln').value.trim();
+  const rn = $('#rn').value.trim();
+  const ak = $('#ak').value.trim();
+  const ur = $('#ur').value.trim();
+  if (!(lc >= 1)) return msg('Build number must be 1 or higher.', 1);
+  if (!ln) return msg('Enter a version name.', 1);
+  if (!/^https:\/\//.test(ur)) return msg('The update page must start with https://', 1);
+  if (ak && !/^https:\/\//.test(ak)) return msg('The APK link must start with https://', 1);
+
+  msg('Saving…');
+  const r = await sb.from('app_config').update({
+    latest_version_code: lc, latest_version_name: ln, min_version_code: 1,
+    release_notes: rn, update_url: ur, apk_url: ak, updated_at: new Date().toISOString()
+  }).eq('id', 1);
+  if (r.error) return msg(r.error.message, 1);
+
+  if ($('#nt').checked) {
+    const n = await sb.from('notifications').insert({
+      type: 'update',
+      title: ('Update available: version ' + ln).slice(0, 100),
+      body: (rn || 'A new version of Audio Adhyay is ready. Tap to update.').slice(0, 300)
+    });
+    if (n.error) return updView('Saved, but the notification failed: ' + n.error.message, 1);
+  }
+  updView('Released. Users will see the required-update popup the next time they open the app.');
+}
+
+init();
+</script>
+</body>
+</html>
